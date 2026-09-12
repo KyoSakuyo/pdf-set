@@ -18,14 +18,14 @@ CRITICAL: 按顺序执行以下阶段，勿跳步。
 
 ## 阶段 2：默认导出命令
 
-默认使用 `--webtex`，因为它能直接支持文档中的 `\cancel{...}`，并把公式预渲染为 SVG/SVGZ 资源打包进 EPUB。不要把 `\cancel` 改写成 `\not`。
+默认使用 `--math-method=webtex:https://latex.codecogs.com/svg.latex?`，因为它能直接支持文档中的 `\cancel{...}`，并把公式预渲染为 SVG/SVGZ 资源打包进 EPUB。不要把 `\cancel` 改写成 `\not`。
 
 ```bash
 pandoc "书籍目录/书籍名(对照翻译).md" \
   --from markdown+tex_math_dollars+tex_math_single_backslash \
   --to epub3 \
   --css "skills/pdf-set/assets/上标.css" \
-  --webtex="https://r.latexeasy.com/image.svg?" \
+  --math-method=webtex:https://latex.codecogs.com/svg.latex? \
   --split-level=6 \
   --resource-path "书籍目录:." \
   --metadata title="书籍名(对照翻译)" \
@@ -35,7 +35,7 @@ pandoc "书籍目录/书籍名(对照翻译).md" \
 参数要求：
 - `+tex_math_dollars`：识别 `$...$` 和 `$$...$$` 公式。
 - `+tex_math_single_backslash`：识别 `\(...\)` 公式。
-- `--webtex="https://r.latexeasy.com/image.svg?"`：直接渲染 `\cancel` 等 Pandoc MathML 不支持的宏。
+- `--math-method=webtex:https://latex.codecogs.com/svg.latex?`：使用 CodeCogs 直接渲染 `\cancel` 等 Pandoc MathML 不支持的宏，并避免弃用警告。
 - `--split-level=6`：识别并按 1-6 级 Markdown 标题建立 EPUB 分割结构。
 - `--resource-path "书籍目录:."`：让 Markdown 中的 `./assets/...` 能从书籍目录解析并打包。
 - `--css "skills/pdf-set/assets/上标.css"`：加入上标样式。
