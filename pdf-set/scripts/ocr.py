@@ -6,6 +6,7 @@ import base64
 from datetime import datetime
 import glob
 import argparse
+from start_delay import parse_delay_args, wait_for_start
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 from openai import OpenAI
  
@@ -60,7 +61,25 @@ MODEL = _extract_secret(
     ],
     secrets_text,
 )
-FALLBACK_MODEL = "claude-sonnet-4-6"
+FALLBACK_SECRETS_PATH = os.path.join(ASSETS_DIR, "secrets_openai.txt.2")
+
+
+def _load_fallback_config(path):
+    text = _load_secrets_text(path)
+    config = {}
+    for name in ("base_url", "api_key", "model"):
+        config[name] = _extract_secret(
+            [rf"(?:['\"]{name}['\"]|\b{name})\s*[:=]\s*['\"]([^'\"]+)['\"]"],
+            text,
+        )
+    missing = [name for name, value in config.items() if not value]
+    if missing:
+        raise RuntimeError(
+            f"Fallback configuration {path} missing required values: {', '.join(missing)}"
+        )
+    return config
+
+
 DEFAULT_BATCH = 3
 REASONING_EFFORT_CHOICES = ("none", "low", "medium", "high", "xhigh", "max")
 DEFAULT_REASONING_EFFORT = "high"
@@ -78,14 +97,14 @@ client = OpenAI(
 
 
 def _reasoning_kwargs(model_name):
-    if str(model_name or "").lower().startswith("gpt-5"):
+    if str(model_name or "").lower().startswith(("gpt-5", "gpt-6")):
         return {"reasoning_effort": REASONING_EFFORT}
     return {}
 
 
 def _request_kwargs(model_name):
     kwargs = _reasoning_kwargs(model_name)
-    if FAST_MODE and str(model_name or "").lower().startswith("gpt-5"):
+    if FAST_MODE and str(model_name or "").lower().startswith(("gpt-5", "gpt-6")):
         kwargs["service_tier"] = "fast"
     return kwargs
  
@@ -234,13 +253,14 @@ def _load_prompt(prompt_path):
     return "Extract and transcribe any visible text from this image, exactly as it appears."
 
 
-def extract_text_from_openai_api(image_path, page_num, prompt_text, model_name=None):
+def extract_text_from_openai_api(image_path, page_num, prompt_text, model_name=None, api_client=None):
     """
     Sends the image to an OpenAI-compatible API and retrieves the extracted text.
     Added detailed logging and error information.
     """
     prohibited_sentinel = "__PROHIBITED_CONTENT__"
     selected_model = model_name or MODEL
+    selected_client = api_client if api_client is not None else client
     last_error_message = None
     for attempt in range(1, 6):
         try:
@@ -261,7 +281,7 @@ def extract_text_from_openai_api(image_path, page_num, prompt_text, model_name=N
                     ],
                 }
             ]
-            response = client.chat.completions.create(
+            response = selected_client.chat.completions.create(
                 model=selected_model,
                 messages=messages,
                 **_request_kwargs(selected_model),
@@ -304,7 +324,14 @@ def extract_text_from_openai_api(image_path, page_num, prompt_text, model_name=N
 def extract_text_with_fallback_model(image_path, page_num, prompt_text):
     text = extract_text_from_openai_api(image_path, page_num, prompt_text, model_name=MODEL)
     if text == "__PROHIBITED_CONTENT__":
-        text = extract_text_from_openai_api(image_path, page_num, prompt_text, model_name=FALLBACK_MODEL)
+        config = _load_fallback_config(FALLBACK_SECRETS_PATH)
+        print(f"\nPage {page_num}: content-filter fallback to {config['model']} "
+              "using secrets_openai.txt.2", flush=True)
+        with OpenAI(base_url=config["base_url"], api_key=config["api_key"]) as fallback_client:
+            text = extract_text_from_openai_api(
+                image_path, page_num, prompt_text,
+                model_name=config["model"], api_client=fallback_client,
+            )
     return text
 
 
@@ -680,7 +707,8 @@ def main():
         default=None,
         help="UTF-8 text file containing prompt file path (first non-empty line).",
     )
-    args = parser.parse_args()
+    args = parse_delay_args(parser)
+    wait_for_start(args.start_delay_seconds)
     REASONING_EFFORT = args.reasoning_effort
     FAST_MODE = args.fast
 

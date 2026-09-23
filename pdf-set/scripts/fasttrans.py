@@ -1,4 +1,5 @@
 import argparse
+from start_delay import parse_delay_args, wait_for_start
 import os
 import random
 import re
@@ -18,20 +19,21 @@ SERVER_500_JITTER_RANGE = (0.8, 1.2)
 REASONING_EFFORT_CHOICES = ("none", "low", "medium", "high", "xhigh", "max")
 DEFAULT_REASONING_EFFORT = "high"
 REASONING_EFFORT = DEFAULT_REASONING_EFFORT
+TRANSLATION_ONLY_MODE = False
 
 _thread_local = threading.local()
 _progress_renderer = None
 
 
 def _reasoning_kwargs(model_name):
-    if str(model_name or "").lower().startswith("gpt-5"):
+    if str(model_name or "").lower().startswith(("gpt-5", "gpt-6")):
         return {"reasoning_effort": REASONING_EFFORT}
     return {}
 
 
 def _request_kwargs(model_name):
     kwargs = _reasoning_kwargs(model_name)
-    if tr.FAST_MODE and str(model_name or "").lower().startswith("gpt-5"):
+    if tr.FAST_MODE and str(model_name or "").lower().startswith(("gpt-5", "gpt-6")):
         kwargs["service_tier"] = "fast"
     return kwargs
 
@@ -316,6 +318,12 @@ def _request_with_fast_timeout_fallback(
     file_label,
 ):
     model = preferred_model or tr.MODEL
+    if TRANSLATION_ONLY_MODE:
+        progress.log(f"{file_label} 主动使用 translation-only 模式。")
+        return _request_fallback_translation(
+            paragraphs, model, expected_inc, progress, file_label
+        )
+
     request_text = _build_standard_request(paragraphs, prompt_text, extra_instruction)
     last_error = None
     empty_count = 0
@@ -382,6 +390,9 @@ def _request_with_fast_timeout_fallback(
 
 
 def _request_fallback_translation(paragraphs, model, expected_inc, progress, file_label):
+    phase_label = (
+        "translation-only 主动模式" if TRANSLATION_ONLY_MODE else "中文-only 回退"
+    )
     fallback_prompt = _load_fallback_prompt()
     request_text = _build_fallback_request(paragraphs, fallback_prompt, expected_inc)
     last_error = None
@@ -401,23 +412,23 @@ def _request_fallback_translation(paragraphs, model, expected_inc, progress, fil
                 server_500_failures += 1
                 if server_500_failures <= len(SERVER_500_BACKOFF_SECONDS):
                     _wait_for_server_500_retry(
-                        server_500_failures, progress, file_label, "中文-only 回退"
+                        server_500_failures, progress, file_label, phase_label
                     )
                     continue
                 raise RuntimeError(
-                    f"中文-only 回退失败（模型 {model}，连续 6 次 HTTP 500）: {last_error}"
+                    f"{phase_label}失败（模型 {model}，连续 6 次 HTTP 500）: {last_error}"
                 ) from err
             ordinary_failures += 1
             if ordinary_failures < 3:
                 time.sleep(2)
                 continue
-            raise RuntimeError(f"中文-only 回退失败（模型 {model}）: {last_error}") from err
+            raise RuntimeError(f"{phase_label}失败（模型 {model}）: {last_error}") from err
 
         translations, block_error, has_blank_line = _parse_fallback_translations(
             text, expected_inc
         )
         if translations and not block_error and not has_blank_line:
-            progress.log(f"{file_label} 已用中文-only 回退完成当前批次。")
+            progress.log(f"{file_label} 已用{phase_label}完成当前批次。")
             return _compose_bilingual_output(paragraphs, translations), model, True
 
         reasons = []
@@ -427,7 +438,7 @@ def _request_fallback_translation(paragraphs, model, expected_inc, progress, fil
             reasons.append("回退输出中出现空行")
         last_output = text
         progress.log(
-            f"{file_label} 中文-only 回退格式不符合要求，准备重试："
+            f"{file_label} {phase_label}格式不符合要求，准备重试："
             + "；".join(reasons)
         )
         format_failures += 1
@@ -435,7 +446,7 @@ def _request_fallback_translation(paragraphs, model, expected_inc, progress, fil
             break
 
     raise RuntimeError(
-        "中文-only 回退失败："
+        f"{phase_label}失败："
         + (f"最后输出片段：{last_output[:300]}" if last_output else str(last_error))
     )
 
@@ -855,7 +866,7 @@ def process_fast_translation_file_list(
 
 
 def main():
-    global REASONING_EFFORT
+    global REASONING_EFFORT, TRANSLATION_ONLY_MODE
 
     _install_threadsafe_translation_hooks()
 
@@ -970,14 +981,22 @@ def main():
         help='Use the Fast service tier (service_tier="fast").',
     )
     parser.add_argument(
+        "--only",
+        dest="translation_only",
+        action="store_true",
+        help="Request translated text only, then compose the standard bilingual output locally.",
+    )
+    parser.add_argument(
         "--max-files",
         type=int,
         dest="batch",
         help=argparse.SUPPRESS,
     )
-    args = parser.parse_args()
+    args = parse_delay_args(parser)
+    wait_for_start(args.start_delay_seconds)
     REASONING_EFFORT = args.reasoning_effort
     tr.FAST_MODE = args.fast
+    TRANSLATION_ONLY_MODE = args.translation_only
 
     base_dir = args.base_dir
     if args.base_dir_from:
@@ -1011,6 +1030,10 @@ def main():
     print(f"Model: {tr.OPENAI_MODEL}")
     print(f"Reasoning effort: {REASONING_EFFORT}")
     print(f"Fast mode: {'enabled' if tr.FAST_MODE else 'disabled'}")
+    print(
+        "Translation-only mode (--only): "
+        + ("enabled" if TRANSLATION_ONLY_MODE else "disabled")
+    )
     print(f"Paragraphs per request: {args.chunk_size}")
     print(f"File index range: {args.start}-{args.end}")
 

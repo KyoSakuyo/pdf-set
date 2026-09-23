@@ -43,9 +43,9 @@
 
 ## 推荐模型
 
-推荐使用最新的 `gpt-5.5` 模型，尤其是 OCR、复杂排版、标题层级判断和翻译任务。
+推荐使用支持图片输入的 `gpt-6-sol` 进行 OCR，并根据任务和 API 服务的可用模型选择排版与翻译模型。
 
-如果你的 API 服务暂时没有开放 `gpt-5.5`，可以退而使用该服务中最新、最强的 GPT-5 系列视觉/多模态模型。OCR 阶段必须选择支持图片输入的模型。
+如果你的 API 服务没有开放该模型，可选择其他支持图片输入的视觉模型。模型名称由 `secrets_openai.txt` 中的 `model` 字段决定。
 
 ## 安装依赖
 
@@ -112,7 +112,7 @@ pdf-set/assets/secrets_openai.txt
 ```text
 base_url = "https://api.openai.com/v1"
 api_key = "你的_API_KEY"
-model = "gpt-5.5"
+model = "gpt-6-sol"
 ```
 
 如果你使用反代服务，例如本地网关或 ProxyPal，一般会类似这样：
@@ -120,7 +120,7 @@ model = "gpt-5.5"
 ```text
 base_url = "http://127.0.0.1:8317/v1"
 api_key = "你的本地或反代 API Key"
-model = "gpt-5.5"
+model = "gpt-6-sol"
 ```
 
 请不要把填好密钥的 `secrets_openai.txt` 上传到公开仓库。这个文件在项目中只应作为空占位文件存在。
@@ -237,13 +237,15 @@ OCR 会逐页调用你在 `secrets_openai.txt` 中配置的模型。大书会消
 
 ## 翻译流程
 
-如果需要翻译，建议先完成 OCR、粗合并、标题分类和排版成书，再进入翻译流程。
+如果需要翻译，建议先完成 OCR、排版成书、标题分类和图片替换，再进入翻译流程。
 
-### 1. 翻译分割
+### 1. 翻译准备
 
 ```text
-使用 pdf-set 对【书籍名】翻译分割
+使用 pdf-set 对【书籍名】翻译准备
 ```
+
+这一步同时完成文件分组和安全断句，生成 `translate-split/` 与可供翻译的 `translate-typeset/`。旧的独立翻译分割、翻译排版命令已移除。
 
 ### 2. 翻译
 
@@ -253,13 +255,7 @@ OCR 会逐页调用你在 `secrets_openai.txt` 中配置的模型。大书会消
 
 翻译会消耗大量 API 额度。长章节建议分批处理，避免单次上下文过大导致模型遗漏、截断或格式混乱。
 
-### 3. 翻译排版
-
-```text
-使用 pdf-set 对【书籍名】翻译排版
-```
-
-### 4. 翻译合并
+### 3. 翻译合并
 
 ```text
 使用 pdf-set 对【书籍名】翻译合并
@@ -283,10 +279,10 @@ OCR：
 python pdf-set/scripts/ocr.py --base-dir "书籍名"
 ```
 
-粗合并：
+翻译准备：
 
 ```bash
-python pdf-set/scripts/merge_rough.py --base-dir "书籍名"
+python pdf-set/scripts/prepare_translation.py --base-dir "书籍名"
 ```
 
 排版成书：
@@ -332,6 +328,16 @@ A：不是。Typora 只是比较方便的 Markdown 编辑器。你也可以使�
 - 如果 Agent 执行失败，把完整报错发给它，让它根据当前目录和 reference 文件继续排查。
 
 ## 版本演进 (Changelog)
+
+### 3.0.0
+
+- 将翻译分割与翻译排版合并为 `prepare_translation.py` 一步；旧的 `translate_split.py`、`translate_typeset.py` 入口已移除。新流程保留原文并拒绝覆盖已有翻译输入。
+- 增加多语言句界识别与 500 个已知误断案例回归测试，改善缩写、页码、姓名、括号和长脚注的断句。
+- OCR 和翻译脚本支持 `--30`、`--3h12m` 等延迟启动参数；快速翻译新增 `--only`，由模型只返回译文，再在本地拼成双语输出。
+- OCR 内容过滤回退改从本地 `secrets_openai.txt.2` 读取独立的接口与模型配置；GPT-6 模型也会传递推理强度及可选 Fast 服务层参数。
+- 更新 OCR 脚注与 translation-only 提示词，并同步使用说明。
+
+升级提示：如果已有按旧规则生成的翻译输入或译文，请保留原目录与段号；新翻译准备会拒绝覆盖非空输出目录。新书请直接使用“翻译准备”入口。
 
 ### 2.3.0
 

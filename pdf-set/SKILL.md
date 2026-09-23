@@ -14,15 +14,14 @@ Use the correct subtask file based on the user's request. Each subtask is a stan
 - **Typeset OCR pages into the final book** → read `references/排版成书.md`
 - **Classify headings in the typeset book** → read `references/标题分类.md`
 - **Replace image placeholders in the typeset book** → read `references/图片替换.md`
-- **Split for translation** → read `references/翻译分割.md`
-- **Typeset translation** → read `references/翻译排版.md`
+- **Prepare translation / 翻译准备（翻译分割 + 翻译排版，合并一步）** → read `references/翻译准备.md`
 - **Translate formatted files** → read `references/翻译.md`
 - **Merge translations** → read `references/翻译合并.md`
 - **Export Markdown to EPUB** → read `references/导出EPUB.md`
 - **Generate a default cover and write EPUB metadata** → read `references/制作封面与元信息.md`
 
 ## Usage Rules
-1. Identify the user's target stage (分图/OCR/跨页脚注/排版成书/标题分类/图片替换/翻译/导出EPUB/封面与元信息).
+1. Identify the user's target stage (分图/OCR/跨页脚注/排版成书/标题分类/图片替换/翻译准备/翻译/导出EPUB/封面与元信息).
 2. Open only the matching subtask file(s).
 3. Follow the steps in order; do not skip CRITICAL phases.
 4. Keep outputs in the specified folders and naming formats.

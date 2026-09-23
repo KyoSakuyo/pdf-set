@@ -16,13 +16,16 @@ CRITICAL:
 ## 脚本参考
 
 - 使用 `scripts/ocr.py` 完成 OCR。
-- OCR 统一使用 OpenAI Python 库及 `assets/secrets_openai.txt` 配置。
+- OCR 统一使用 OpenAI Python 库及 `assets/secrets_openai.txt` 配置；主模型默认为 `gpt-6-sol`。
+- 主模型返回内容过滤标记时，回退使用 `assets/secrets_openai.txt.2` 中的 `base_url`、`api_key` 和 `model`。该配置仅在触发回退时读取，缺失或不完整会明确报错；不使用写死的回退模型。
 - 默认按当前工作目录推导路径：
   - 输入：`<当前目录>/images/`
   - 输出：`<当前目录>/ocr-result/`
   - Prompt：`<skill-dir>/assets/ocr_prompt.md`
   - 密钥配置：`<skill-dir>/assets/secrets_openai.txt`，需包含 `base_url`、`api_key`、`model`
 - 可选参数：
+  - `--数字`：延迟指定分钟后开始，例如 `--30` 等待 30 分钟。
+  - `--3h12m`：延迟 3 小时 12 分钟；也支持 `--3h`、`--12m`。每条命令只能带一个倒计时参数，可与其他参数组合；不加则立即执行。终端显示剩余时间，Ctrl+C 取消；等待期间需保持进程运行。多书任务只在开始前等待一次。
   - `--base-dir` 指定书籍目录
   - `--book-name` 指定书籍名（自动定位到 `<base-dir>/<书籍名>`），可指定多个书名
   - `--input-dir` 指定完整输入目录
@@ -33,8 +36,8 @@ CRITICAL:
   - `--end` 指定结束序号（含）
   - `--batch-size` 指定并发批次大小
   - `--batch` 是 `--batch-size` 的别名
-  - `--reasoning-effort` 指定 GPT-5 推理强度，可选 `none`、`low`、`medium`、`high`、`xhigh`、`max`，默认 `high`
-  - `--fast` 为 GPT-5 API 请求启用 Fast 服务层（`service_tier="fast"`）；默认不启用
+  - `--reasoning-effort` 指定 GPT-5/GPT-6 推理强度，可选 `none`、`low`、`medium`、`high`、`xhigh`、`max`，默认 `high`
+  - `--fast` 为 GPT-5/GPT-6 API 请求启用 Fast 服务层（`service_tier="fast"`）；默认不启用
   - `--overwrite` 强制重跑已有输出
   - `--prompt-file` 指定 prompt 文件路径
   - `--base-dir-from` 使用 UTF-8 文本文件提供书籍目录（首个非空行）
